@@ -1,14 +1,16 @@
 from django.urls import path
+from django.conf import settings
+from django.conf.urls.static import static
 from .views import (
     VisitorListCreateAPIView,
     VisitorDetailAPIView,
-    VisitorPassCreateAPIView,
-    VisitorPassCheckoutAPIView,
+    VisitorStatusUpdateAPIView,
+    VisitorTimelineAPIView,
 )
 
 urlpatterns = [
     path("visitors/", VisitorListCreateAPIView.as_view(), name="visitor-list-create"),
     path("visitors/<int:pk>/", VisitorDetailAPIView.as_view(), name="visitor-detail"),
-    path("visitor-passes/", VisitorPassCreateAPIView.as_view(), name="visitor-pass-create"),
-    path("visitor-passes/<int:pk>/checkout/", VisitorPassCheckoutAPIView.as_view(), name="visitor-pass-checkout"),
-]
+    path("visitors/<int:pk>/status/", VisitorStatusUpdateAPIView.as_view(), name="visitor-status"),
+    path("visitors/<int:pk>/timeline/", VisitorTimelineAPIView.as_view(), name="visitor-timeline"),
+] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

@@ -114,7 +114,7 @@ class PasswordResetRequestView(generics.GenericAPIView):
         user = User.objects.get(email=email)
 
         token_obj = PasswordResetToken.objects.create(user=user)
-        reset_link = f"{settings.BACKEND_URL}/reset-password-confirm/?token={token_obj.token}"
+        reset_link = f"{settings.BACKEND_URL}/api/auth/password-reset-confirm/?token={token_obj.token}"
 
         send_mail(
             subject="Password Reset Request",

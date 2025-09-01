@@ -35,9 +35,15 @@ DEBUG = config('DEBUG', default=False, cast=bool)
 
 ALLOWED_HOSTS = [h.strip() for h in config("ALLOWED_HOSTS", default="localhost").split(",")]
 
+# AWS S3 Settings
+DEFAULT_FILE_STORAGE = config("DEFAULT_FILE_STORAGE")
+AWS_ACCESS_KEY_ID = config("AWS_ACCESS_KEY_ID")
+AWS_SECRET_ACCESS_KEY = config("AWS_SECRET_ACCESS_KEY")
+AWS_STORAGE_BUCKET_NAME = config("AWS_STORAGE_BUCKET_NAME")
+AWS_S3_REGION_NAME = config("AWS_S3_REGION_NAME")
+
 
 # Application definition
-
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
@@ -48,12 +54,11 @@ INSTALLED_APPS = [
     'rest_framework',
     'rest_framework_simplejwt.token_blacklist',
     'corsheaders',
-    'drf_yasg',
     'django_filters',
+    'storages',
 
     # Custom Apps
     'authentication',
-    'employee',
     'visitors',
     'invites',
     'reports',
@@ -75,13 +80,13 @@ ROOT_URLCONF = 'visitor_management.urls'
 
 CORS_ALLOW_ALL_ORIGINS = True 
 
-CORS_ALLOWED_ORIGINS = [
-    FRONTEND_URL,  # allow frontend
-]
+# CORS_ALLOWED_ORIGINS = [
+#     FRONTEND_URL,  # allow frontend
+# ]
 
-CSRF_TRUSTED_ORIGINS = [
-    FRONTEND_URL,
-]
+# CSRF_TRUSTED_ORIGINS = [
+#     FRONTEND_URL,
+# ]
 
 # settings.py
 CACHES = {
@@ -207,5 +212,7 @@ REST_FRAMEWORK = {
     ),
     'DEFAULT_FILTER_BACKENDS': (
         'django_filters.rest_framework.DjangoFilterBackend',
+        "rest_framework.filters.SearchFilter",
+        "rest_framework.filters.OrderingFilter",
     ),
 }

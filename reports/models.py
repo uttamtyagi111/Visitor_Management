@@ -1,5 +1,4 @@
 from django.db import models
-from authentication.models import User
 from invites.models import Invite
 
 class Report(models.Model):

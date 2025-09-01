@@ -1,19 +1,38 @@
 from rest_framework import serializers
-from .models import Visitor, VisitorPass
+from .models import Visitor, VisitorStatusTimeline
+
 
 class VisitorSerializer(serializers.ModelSerializer):
+    timelines = serializers.SerializerMethodField()
+    image = serializers.ImageField(write_only=True, required=False) 
+
     class Meta:
         model = Visitor
-        fields = "__all__"
+        fields = [
+            "id",
+            "name",
+            "email",
+            "phone",
+            "purpose",
+            "image",
+            "created_at",
+            "issued_by",
+            "status",
+            "check_in",
+            "check_out",
+            "is_active",
+            "timelines",
+        ]
+        read_only_fields = ["created_at", "check_in", "check_out", "is_active", "timelines"]
+
+    def get_timelines(self, obj):
+        timelines = obj.status_timelines.all()
+        return VisitorStatusTimelineSerializer(timelines, many=True).data
 
 
-class VisitorPassSerializer(serializers.ModelSerializer):
-    visitor = VisitorSerializer(read_only=True)
-    visitor_id = serializers.PrimaryKeyRelatedField(
-        queryset=Visitor.objects.all(), source="visitor", write_only=True
-    )
+class VisitorStatusTimelineSerializer(serializers.ModelSerializer):
+    updated_by = serializers.StringRelatedField()
 
     class Meta:
-        model = VisitorPass
-        fields = ["id", "visitor", "visitor_id", "issued_by", "purpose", "check_in", "check_out", "is_active"]
-        read_only_fields = ["check_in", "check_out", "is_active"]
+        model = VisitorStatusTimeline
+        fields = ["id", "status", "updated_by", "timestamp"]
