@@ -1,5 +1,3 @@
-import boto3
-from django.conf import settings
 from rest_framework import generics, status, filters
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
@@ -7,27 +5,27 @@ from django.utils.timezone import now
 import django_filters
 from .models import Visitor, VisitorStatusTimeline
 from .serializers import VisitorSerializer, VisitorStatusTimelineSerializer
-
+from utils.upload_to_s3 import upload_to_s3
 
 # ---------------------------
 # Visitor CRUD + Pass Handling
 # ---------------------------
 
-s3_client = boto3.client(
-    "s3",
-    aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
-    aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
-    region_name=settings.AWS_S3_REGION_NAME,
-)
+# s3_client = boto3.client(
+#     "s3",
+#     aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
+#     aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
+#     region_name=settings.AWS_S3_REGION_NAME,
+# )
 
-def upload_to_s3(file_obj, filename):
-    """
-    Uploads a file object to S3 and returns the URL.
-    """
-    bucket_name = settings.AWS_STORAGE_BUCKET_NAME
-    s3_client.upload_fileobj(file_obj, bucket_name, filename, ExtraArgs={'ACL': 'public-read'})
-    url = f"https://{bucket_name}.s3.{settings.AWS_S3_REGION_NAME}.amazonaws.com/{filename}"
-    return url
+# def upload_to_s3(file_obj, filename):
+#     """
+#     Uploads a file object to S3 and returns the URL.
+#     """
+#     bucket_name = settings.AWS_STORAGE_BUCKET_NAME
+#     s3_client.upload_fileobj(file_obj, bucket_name, filename, ExtraArgs={'ACL': 'public-read'})
+#     url = f"https://{bucket_name}.s3.{settings.AWS_S3_REGION_NAME}.amazonaws.com/{filename}"
+#     return url
 
 
 class VisitorListCreateAPIView(generics.ListCreateAPIView):

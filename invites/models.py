@@ -1,22 +1,25 @@
+import uuid
 import qrcode
 from io import BytesIO
-from django.core.files import File
 from django.db import models
 from django.conf import settings
-
-
+from utils.upload_to_s3 import upload_to_s3  # your existing S3 upload function
+from django.contrib.auth import get_user_model
+User = get_user_model()
 
 class Invite(models.Model):
-    invited_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL,  # use settings.AUTH_USER_MODEL
-        on_delete=models.CASCADE,
-        related_name="invites"
-    )
+    invited_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name="invites")
     visitor_name = models.CharField(max_length=100)
     visitor_email = models.EmailField()
     visitor_phone = models.CharField(max_length=15, blank=True, null=True)
     purpose = models.TextField(blank=True, null=True)
     visit_time = models.DateTimeField()
+    expiry_time = models.DateTimeField(null=True, blank=True)
+
+    invite_code = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    image = models.URLField(blank=True, null=True)   # ✅ S3 image URL
+    qr_code = models.URLField(blank=True, null=True)  # ✅ S3 QR code URL
+
     status = models.CharField(
         max_length=20,
         choices=[
@@ -25,30 +28,39 @@ class Invite(models.Model):
             ("approved", "Approved"),
             ("checked_in", "Checked In"),
             ("checked_out", "Checked Out"),
-            ("rejected", "Rejected")
+            ("rejected", "Rejected"),
         ],
         default="created"
     )
-    qr_code = models.ImageField(upload_to="qr_codes/", blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
         return f"Invite for {self.visitor_name} ({self.status})"
 
-    def save(self, *args, **kwargs):
-        super().save(*args, **kwargs)  # Save first so we have an ID
+    def generate_qr(self):
+        """
+        Generate QR code only if visitor image exists and QR not generated yet.
+        Upload QR code to S3 and save its URL.
+        """
+        if self.image and not self.qr_code:
+            qr_data = {
+                "invite_code": str(self.invite_code),
+                "visitor_name": self.visitor_name,
+                "visitor_email": self.visitor_email,
+                "visitor_phone": self.visitor_phone,
+                "purpose": self.purpose,
+                "visit_time": str(self.visit_time),
+                "image": self.image,
+            }
 
-        if not self.qr_code:
-            qr_data = (
-                f"INVITE_ID:{self.id} | Visitor:{self.visitor_name} | "
-                f"Email:{self.visitor_email} | Visit:{self.visit_time}"
-            )
-            qr_img = qrcode.make(qr_data)
-
+            # generate QR image
+            qr_img = qrcode.make(str(qr_data))
             buffer = BytesIO()
             qr_img.save(buffer, format="PNG")
-            file_name = f"invite_{self.id}.png"
-            self.qr_code.save(file_name, File(buffer), save=False)
-            buffer.close()
+            buffer.seek(0)
 
-            super().save(update_fields=["qr_code"])
+            qr_filename = f"qr_codes/invite_{self.invite_code}.png"
+            qr_url = upload_to_s3(buffer, qr_filename)
+
+            self.qr_code = qr_url
+            self.save(update_fields=["qr_code"])
