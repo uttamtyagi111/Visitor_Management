@@ -3,6 +3,8 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 from django.utils import timezone
+
+from reports.utils import add_to_report_from_invite
 from .models import Invite
 from .serializers import InviteSerializer
 import uuid
@@ -13,16 +15,21 @@ class InviteListCreateView(generics.ListCreateAPIView):
     permission_classes = [IsAuthenticated]
 
     def perform_create(self, serializer):
-        serializer.save(
-            invited_by=self.request.user,
-            invite_code=str(uuid.uuid4())[:8]  # short unique code
-        )
+        invite = serializer.save(invited_by=self.request.user, invite_code=uuid.uuid4())
+        add_to_report_from_invite(invite)
 
 class InviteDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Invite.objects.all()
     serializer_class = InviteSerializer
     permission_classes = [IsAuthenticated]
+    lookup_field = "pk"
 
+
+class InviteDetailByCodeView(generics.RetrieveAPIView):
+    queryset = Invite.objects.all()
+    serializer_class = InviteSerializer
+    permission_classes = []  # ❌ No login required for users
+    lookup_field = "invite_code"
 
 # ✅ Unified status update instead of 3 separate views
 class UpdateInviteStatusView(generics.UpdateAPIView):

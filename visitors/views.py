@@ -6,7 +6,7 @@ import django_filters
 from .models import Visitor, VisitorStatusTimeline
 from .serializers import VisitorSerializer, VisitorStatusTimelineSerializer
 from utils.upload_to_s3 import upload_to_s3
-
+from reports.utils import add_to_report_from_visitor
 # ---------------------------
 # Visitor CRUD + Pass Handling
 # ---------------------------
@@ -42,12 +42,12 @@ class VisitorListCreateAPIView(generics.ListCreateAPIView):
         if image_file:
             filename = f"visitor_images/{image_file.name}"
             image_url = upload_to_s3(image_file, filename)
-            serializer.save(image=image_url)
+            visitor = serializer.save(image=image_url)
             print("Image uploaded to S3:", image_url)
         else:
-            serializer.save()
+            visitor = serializer.save()
             print("No image uploaded.")
-
+        add_to_report_from_visitor(visitor)
 
 class VisitorDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Visitor.objects.all().select_related("issued_by")

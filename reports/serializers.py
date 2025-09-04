@@ -2,9 +2,15 @@ from rest_framework import serializers
 from .models import Report
 
 class ReportSerializer(serializers.ModelSerializer):
-    visitor_name = serializers.CharField(source="invite.visitor_name", read_only=True)
-    employee_name = serializers.CharField(source="invite.employee.name", read_only=True)
+    visitor_name = serializers.SerializerMethodField()
 
     class Meta:
         model = Report
-        fields = ["id", "visitor_name", "employee_name", "check_in", "check_out", "remarks"]
+        fields = ["id", "visitor_name", "check_in", "check_out", "remarks", "visit_count"]
+
+    def get_visitor_name(self, obj):
+        if obj.invite:
+            return obj.invite.visitor_name
+        if obj.visitor:
+            return obj.visitor.name
+        return None

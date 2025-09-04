@@ -1,12 +1,27 @@
 from django.urls import path
 from .views import (
-    InviteListCreateView, InviteDetailView
+    InviteListCreateView,
+    InviteDetailView,
+    InviteDetailByCodeView,
+    UpdateInviteStatusView,
+    VerifyInviteView,
+    CaptureVisitorDataView,
 )
 
 urlpatterns = [
+    # Admin usage (list + create)
     path("invites/", InviteListCreateView.as_view(), name="invite-list-create"),
-    path("invites/<int:pk>/", InviteDetailView.as_view(), name="invite-detail"),]
-#     path("invites/<int:pk>/approve/", ApproveInviteView.as_view(), name="invite-approve"),
-#     path("invites/<int:pk>/checkin/", CheckInView.as_view(), name="invite-checkin"),
-#     path("invites/<int:pk>/checkout/", CheckOutView.as_view(), name="invite-checkout"),
-# ]
+
+    # Admin usage (detail by primary key)
+    path("invites/<int:pk>/", InviteDetailView.as_view(), name="invite-detail"),
+
+    # Admin + User usage (detail by UUID)
+    path("invites/<uuid:invite_code>/", InviteDetailByCodeView.as_view(), name="invite-detail-code"),
+
+    # Status update (admin/guards/etc.)
+    path("invites/<int:pk>/status/", UpdateInviteStatusView.as_view(), name="invite-status"),
+
+    # User flow (verify + capture)
+    path("invites/verify/", VerifyInviteView.as_view(), name="invite-verify"),
+    path("invites/capture/", CaptureVisitorDataView.as_view(), name="invite-capture"),
+]
