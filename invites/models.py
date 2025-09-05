@@ -16,9 +16,10 @@ class Invite(models.Model):
     visit_time = models.DateTimeField()
     expiry_time = models.DateTimeField(null=True, blank=True)
 
-    invite_code = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    invite_code = models.CharField(max_length=6, unique=True, editable=False)
     image = models.URLField(blank=True, null=True)   # ✅ S3 image URL
-    qr_code = models.URLField(blank=True, null=True)  # ✅ S3 QR code URL
+    qr_code = models.URLField(blank=True, null=True)
+    pass_image = models.URLField(blank=True, null=True)  # ✅ S3 pass image URL
 
     status = models.CharField(
         max_length=20,

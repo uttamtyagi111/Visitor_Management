@@ -13,11 +13,11 @@ class InviteSerializer(serializers.ModelSerializer):
             "visit_time", "expiry_time",   # ✅ keep visit timings
             "invite_code",                 # ✅ unique invite code
             "image",                       # ✅ uploaded image
-            "status", "qr_code",           # ✅ QR code + status
+            "status", "qr_code", "pass_image",         # ✅ QR code + status+ pass_image
             "created_at",                  # ✅ created timestamp
         ]
         read_only_fields = [
-            "id", "status", "qr_code", "created_at",
+            "id", "status", "qr_code", "pass_image", "created_at",
             "invited_by", "invite_code"
         ]
 

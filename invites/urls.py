@@ -6,6 +6,7 @@ from .views import (
     UpdateInviteStatusView,
     VerifyInviteView,
     CaptureVisitorDataView,
+    # ServePassView,
 )
 
 urlpatterns = [
@@ -24,4 +25,7 @@ urlpatterns = [
     # User flow (verify + capture)
     path("invites/verify/", VerifyInviteView.as_view(), name="invite-verify"),
     path("invites/capture/", CaptureVisitorDataView.as_view(), name="invite-capture"),
+    
+    # New: QR verification to serve the pass image
+    # path("invites/verify-pass/<str:invite_code>/", ServePassView.as_view(), name="serve-pass"),
 ]

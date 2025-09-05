@@ -15,8 +15,8 @@ class InviteListCreateView(generics.ListCreateAPIView):
     permission_classes = [IsAuthenticated]
 
     def perform_create(self, serializer):
-        invite = serializer.save(invited_by=self.request.user, invite_code=uuid.uuid4())
-        add_to_report_from_invite(invite)
+        short_code = str(uuid.uuid4()).replace("-", "")[:6]  # ✅ 6 chars
+        serializer.save(invited_by=self.request.user, invite_code=short_code)
 
 class InviteDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Invite.objects.all()
@@ -93,10 +93,31 @@ class CaptureVisitorDataView(APIView):
         invite.status = "pending"
         invite.save(update_fields=["image", "status"])
 
-        # ✅ Generate QR code (uploads to S3 too)
-        invite.generate_qr()
+        # # ✅ Generate QR code (uploads to S3 too)
+        # invite.generate_pass_and_qr()
 
         return Response(
             {"message": "Visitor data captured", "invite": InviteSerializer(invite).data},
             status=status.HTTP_200_OK
         )
+# views.py
+# from django.http import HttpResponseRedirect
+
+# class ServePassView(generics.RetrieveAPIView):
+#     queryset = Invite.objects.all()
+#     serializer_class = InviteSerializer
+#     permission_classes = []  # No login required for scanning
+#     lookup_field = "invite_code"
+
+#     def get(self, request, *args, **kwargs):
+#         invite = self.get_object()
+        
+#         # Check expiry
+#         if invite.expiry_time and invite.expiry_time < timezone.now():
+#             return Response({"error": "Invite expired"}, status=status.HTTP_400_BAD_REQUEST)
+        
+#         # Redirect to pass_image URL
+#         if invite.pass_image:
+#             return HttpResponseRedirect(invite.pass_image)
+#         return Response({"error": "Pass not generated"}, status=status.HTTP_404_NOT_FOUND)
+

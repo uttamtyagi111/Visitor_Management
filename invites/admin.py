@@ -6,9 +6,10 @@ from .models import Invite
 class InviteAdmin(admin.ModelAdmin):
     list_display = (
         "id", 
-        "invited_by", 
         "visitor_name", 
         "visitor_email", 
+        "invite_code", 
+        "invited_by",
         "visit_time", 
         "status", 
         "created_at"
