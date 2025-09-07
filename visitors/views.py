@@ -47,7 +47,7 @@ class VisitorListCreateAPIView(generics.ListCreateAPIView):
         else:
             visitor = serializer.save()
             print("No image uploaded.")
-        add_to_report_from_visitor(visitor)
+        # add_to_report_from_visitor(visitor)
 
 class VisitorDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Visitor.objects.all().select_related("issued_by")
