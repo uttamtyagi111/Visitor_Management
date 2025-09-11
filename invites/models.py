@@ -36,7 +36,7 @@ class Invite(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"Invite for {self.visitor_name} ({self.status})"
+        return f"name: {self.visitor_name} , email: {self.visitor_email}  created_at: {self.created_at.strftime('%Y-%m-%d')} - status: {self.status}"
 
     def generate_qr(self):
         """

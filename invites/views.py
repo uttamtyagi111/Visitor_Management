@@ -46,6 +46,8 @@ class UpdateInviteStatusView(generics.UpdateAPIView):
 
         invite.status = new_status
         invite.save()
+        
+        add_to_report_from_invite(invite)
         return Response(InviteSerializer(invite).data, status=status.HTTP_200_OK)
 
 
@@ -92,6 +94,7 @@ class CaptureVisitorDataView(APIView):
         invite.image = image_url
         invite.status = "pending"
         invite.save(update_fields=["image", "status"])
+        # add_to_report_from_invite(invite)
 
         # # ✅ Generate QR code (uploads to S3 too)
         # invite.generate_pass_and_qr()

@@ -8,8 +8,12 @@ from .views import (
     VisitorTimelineAPIView,
     VisitorListWithFiltersAPIView,
 )
-
+from . import views
 urlpatterns = [
+    path('visitor/', views.create_visitor, name='create-visitor'),
+    
+    # QR code info endpoint (optional)
+    path('qr/info/', views.get_qr_info, name='qr-info'),
     path("visitors/", VisitorListCreateAPIView.as_view(), name="visitor-list-create"),
     path("visitors/search/", VisitorListWithFiltersAPIView.as_view(), name="visitor-search"),
     path("visitors/<int:pk>/", VisitorDetailAPIView.as_view(), name="visitor-detail"),

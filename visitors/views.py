@@ -27,6 +27,99 @@ from reports.utils import add_to_report_from_visitor
 #     url = f"https://{bucket_name}.s3.{settings.AWS_S3_REGION_NAME}.amazonaws.com/{filename}"
 #     return url
 
+from rest_framework import status
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import AllowAny
+from rest_framework.response import Response
+from django.utils import timezone
+from .models import Visitor
+from .serializers import VisitorSerializer
+
+@api_view(['POST'])
+@permission_classes([AllowAny])  # No authentication required for visitor registration
+def create_visitor(request):
+    """Create a new visitor registration"""
+    try:
+        # Extract data from request
+        visitor_data = {
+            'name': request.data.get('name', '').strip(),
+            'phone': request.data.get('phone', '').strip(),
+            'email': request.data.get('email', '').strip(),
+            'purpose': request.data.get('purpose', ''),
+            'status': 'pending',  # Always starts as pending
+        }
+        
+        # Validate required fields
+        if not visitor_data['name']:
+            return Response({
+                'error': 'Name is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        if not visitor_data['phone']:
+            return Response({
+                'error': 'Phone number is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Check if image is provided (required)
+        if 'image' not in request.FILES:
+            return Response({
+                'error': 'Image is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        image_file = request.FILES['image']
+        
+        # Basic image validation
+        if not image_file.name.lower().endswith(('.jpg', '.jpeg', '.png')):
+            return Response({
+                'error': 'Only JPG, JPEG, and PNG files are allowed'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Create visitor
+        visitor = Visitor.objects.create(**visitor_data)
+        
+        # Upload image to S3
+        filename = f"visitor_images/{visitor.id}_{image_file.name}"
+        image_url = upload_to_s3(image_file, filename)
+        
+        if not image_url:
+            # Delete visitor if image upload fails
+            visitor.delete()
+            return Response({
+                'error': 'Image upload failed'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+        # Update visitor with image URL
+        visitor.image = image_url
+        visitor.save()
+        
+        add_to_report_from_visitor(visitor)
+        
+        return Response({
+            'id': visitor.id,
+            'name': visitor.name,
+            'phone': visitor.phone,
+            'email': visitor.email,
+            'status': visitor.status,
+            'image': visitor.image,
+            'created_at': visitor.created_at,
+            'message': 'Visitor registered successfully. Please wait for approval.'
+        }, status=status.HTTP_201_CREATED)
+        
+    except Exception as e:
+        return Response({
+            'error': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def get_qr_info(request):
+    """Get information for QR code display"""
+    return Response({
+        'registration_url': f"{request.build_absolute_uri('/')[:-1]}/visitor",
+        'title': 'Visitor Registration',
+        'description': 'Scan to register as a visitor',
+        'instructions': 'Please scan this QR code with your phone to start the visitor registration process.'
+    })
 
 class VisitorListCreateAPIView(generics.ListCreateAPIView):
     queryset = Visitor.objects.all().select_related("issued_by")
@@ -47,12 +140,34 @@ class VisitorListCreateAPIView(generics.ListCreateAPIView):
         else:
             visitor = serializer.save()
             print("No image uploaded.")
-        # add_to_report_from_visitor(visitor)
+            
+        add_to_report_from_visitor(visitor)
 
 class VisitorDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Visitor.objects.all().select_related("issued_by")
     serializer_class = VisitorSerializer
     permission_classes = [IsAuthenticated]
+    
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop("partial", False)
+        instance = self.get_object()
+
+        image_file = request.FILES.get("image")
+        if image_file:
+            filename = f"visitor_images/{image_file.name}"
+            image_url = upload_to_s3(image_file, filename)
+            request.data._mutable = True  # allow editing request.data
+            request.data["image"] = image_url
+            request.data._mutable = False
+
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+
+        # ✅ update report after edit
+        add_to_report_from_visitor(instance)
+
+        return Response(serializer.data)
 
 
 # ---------------------------
