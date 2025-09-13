@@ -4,7 +4,7 @@ from .models import Visitor, VisitorStatusTimeline
 
 class VisitorSerializer(serializers.ModelSerializer):
     timelines = serializers.SerializerMethodField()
-    image = serializers.ImageField(write_only=True, required=False) 
+    # image = serializers.ImageField(write_only=True, required=False)   
 
     class Meta:
         model = Visitor
