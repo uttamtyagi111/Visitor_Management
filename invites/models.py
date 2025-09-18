@@ -1,13 +1,25 @@
 import uuid
+from django.utils import timezone
 import qrcode
 from io import BytesIO
 from django.db import models
 from django.conf import settings
-from utils.upload_to_s3 import upload_to_s3  # your existing S3 upload function
+from utils.upload_to_s3 import upload_to_s3
 from django.contrib.auth import get_user_model
+
 User = get_user_model()
 
+
 class Invite(models.Model):
+    STATUS_CHOICES = [
+        ("created", "Created"),
+        ("pending", "Pending"),
+        ("approved", "Approved"),
+        ("checked_in", "Checked In"),
+        ("checked_out", "Checked Out"),
+        ("rejected", "Rejected"),
+    ]
+
     invited_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name="invites")
     visitor_name = models.CharField(max_length=100)
     visitor_email = models.EmailField()
@@ -23,20 +35,13 @@ class Invite(models.Model):
 
     status = models.CharField(
         max_length=20,
-        choices=[
-            ("created", "Created"),
-            ("pending", "Pending"),
-            ("approved", "Approved"),
-            ("checked_in", "Checked In"),
-            ("checked_out", "Checked Out"),
-            ("rejected", "Rejected"),
-        ],
+        choices=STATUS_CHOICES,
         default="created"
     )
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"name: {self.visitor_name} , email: {self.visitor_email}  created_at: {self.created_at.strftime('%Y-%m-%d')} - status: {self.status}"
+        return f"{self.visitor_name} ({self.visitor_email}) - status: {self.status}"
 
     def generate_qr(self):
         """
@@ -54,7 +59,6 @@ class Invite(models.Model):
                 "image": self.image,
             }
 
-            # generate QR image
             qr_img = qrcode.make(str(qr_data))
             buffer = BytesIO()
             qr_img.save(buffer, format="PNG")
@@ -65,3 +69,16 @@ class Invite(models.Model):
 
             self.qr_code = qr_url
             self.save(update_fields=["qr_code"])
+
+
+class InviteStatusTimeline(models.Model):
+    invite = models.ForeignKey("Invite", on_delete=models.CASCADE, related_name="status_timelines")
+    status = models.CharField(max_length=20, choices=Invite.STATUS_CHOICES)
+    updated_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+    timestamp = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ["-timestamp"]
+
+    def __str__(self):
+        return f"{self.invite.visitor_name} - {self.status} @ {self.timestamp}"

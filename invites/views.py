@@ -5,7 +5,7 @@ from rest_framework.views import APIView
 from django.utils import timezone
 
 from reports.utils import add_to_report_from_invite
-from .models import Invite
+from .models import Invite, InviteStatusTimeline
 from .serializers import InviteSerializer
 import uuid
 
@@ -16,8 +16,11 @@ class InviteListCreateView(generics.ListCreateAPIView):
 
     def perform_create(self, serializer):
         short_code = str(uuid.uuid4()).replace("-", "")[:6]  # ✅ 6 chars
-        serializer.save(invited_by=self.request.user, invite_code=short_code)
-
+        invite = serializer.save(invited_by=self.request.user, invite_code=short_code)
+        # Log initial status in timeline
+        InviteStatusTimeline.objects.create(
+            invite=invite, status=invite.status, updated_by=self.request.user
+        )
 class InviteDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Invite.objects.all()
     serializer_class = InviteSerializer
@@ -39,16 +42,52 @@ class UpdateInviteStatusView(generics.UpdateAPIView):
 
     def patch(self, request, *args, **kwargs):
         invite = self.get_object()
-        new_status = request.data.get("status")
+        data = request.data
+        status_updated = False
+        details_updated = False
 
-        if new_status not in dict(Invite._meta.get_field("status").choices):
-            return Response({"error": "Invalid status"}, status=status.HTTP_400_BAD_REQUEST)
+        # 1️⃣ Check if status is being updated
+        new_status = data.get("status")
+        if new_status:
+            if new_status not in dict(Invite._meta.get_field("status").choices):
+                return Response({"error": "Invalid status"}, status=status.HTTP_400_BAD_REQUEST)
+            
+            if new_status != invite.status:
+                invite.status = new_status
+                invite.save(update_fields=["status"])
+                status_updated = True
 
-        invite.status = new_status
-        invite.save()
+                # Timeline for status change
+                InviteStatusTimeline.objects.create(
+                    invite=invite,
+                    status=new_status,
+                    updated_by=request.user
+                )
+
+        # 2️⃣ Check if other fields are updated
+        editable_fields = ["visitor_name", "visitor_email", "visitor_phone", "purpose", "visit_time", "expiry_time", "image", "pass_image"]
+        changes = []
+        for field in editable_fields:
+            if field in data and getattr(invite, field) != data[field]:
+                changes.append(field)
+                setattr(invite, field, data[field])
         
+        if changes:
+            invite.save(update_fields=changes)
+            details_updated = True
+
+            # Timeline for details change
+            InviteStatusTimeline.objects.create(
+                invite=invite,
+                status=f"Details updated ({', '.join(changes)})",
+                updated_by=request.user
+            )
+
+        # 3️⃣ Optional: existing report function
         add_to_report_from_invite(invite)
+
         return Response(InviteSerializer(invite).data, status=status.HTTP_200_OK)
+
 
 
 class VerifyInviteView(APIView):
@@ -94,6 +133,10 @@ class CaptureVisitorDataView(APIView):
         invite.image = image_url
         invite.status = "pending"
         invite.save(update_fields=["image", "status"])
+        
+        InviteStatusTimeline.objects.create(
+            invite=invite, status="pending", updated_by=None
+        )
         # add_to_report_from_invite(invite)
 
         # # ✅ Generate QR code (uploads to S3 too)

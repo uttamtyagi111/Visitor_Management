@@ -92,6 +92,12 @@ def create_visitor(request):
         visitor.image = image_url
         visitor.save()
         
+        VisitorStatusTimeline.objects.create(
+            visitor=visitor,
+            status=visitor.status,
+            updated_by=None  # no user since it’s self-registration
+        )
+        
         add_to_report_from_visitor(visitor)
         
         return Response({
@@ -152,6 +158,9 @@ class VisitorDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
         partial = kwargs.pop("partial", False)
         instance = self.get_object()
 
+        # ✅ Capture old status BEFORE updating
+        old_status = instance.status  
+
         image_file = request.FILES.get("image")
         if image_file:
             filename = f"visitor_images/{image_file.name}"
@@ -164,10 +173,17 @@ class VisitorDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
         serializer.is_valid(raise_exception=True)
         self.perform_update(serializer)
 
+        # ✅ Compare new status with old
+        if instance.status != old_status:
+            VisitorStatusTimeline.objects.create(
+                visitor=instance, status=instance.status, updated_by=request.user
+            )
+
         # ✅ update report after edit
         add_to_report_from_visitor(instance)
 
         return Response(serializer.data)
+
 
 
 # ---------------------------
@@ -181,7 +197,7 @@ class VisitorStatusUpdateAPIView(generics.UpdateAPIView):
     def update(self, request, *args, **kwargs):
         visitor = self.get_object()
         new_status = request.data.get("status")
-
+        print(f"Updating visitor {visitor.id} status to {new_status}")
         if new_status not in dict(Visitor.STATUS_CHOICES):
             return Response({"detail": "Invalid status"}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -191,7 +207,7 @@ class VisitorStatusUpdateAPIView(generics.UpdateAPIView):
         elif new_status == "checked_out":
             visitor.check_out = now()
             visitor.is_active = False
-        visitor.save()
+        visitor.save() 
 
         # log timeline
         VisitorStatusTimeline.objects.create(
