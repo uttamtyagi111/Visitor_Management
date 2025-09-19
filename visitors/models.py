@@ -19,7 +19,8 @@ class Visitor(models.Model):
     email = models.EmailField()
     phone = models.CharField(max_length=20)
     purpose = models.CharField(max_length=255, null=False, blank=False)
-    image = models.URLField(blank=True, null=True) 
+    image = models.URLField(blank=True, null=True)
+    pass_file = models.URLField(blank=True, null=True) 
     created_at = models.DateTimeField(auto_now_add=True)
 
     # Pass related fields (merged from VisitorPass)

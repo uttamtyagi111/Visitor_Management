@@ -1,3 +1,4 @@
+from rest_framework.decorators import api_view, permission_classes
 from rest_framework import generics, status, filters
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
@@ -7,6 +8,7 @@ from .models import Visitor, VisitorStatusTimeline
 from .serializers import VisitorSerializer, VisitorStatusTimelineSerializer
 from utils.upload_to_s3 import upload_to_s3
 from reports.utils import add_to_report_from_visitor
+from visitors.utils import send_visitor_status_email
 # ---------------------------
 # Visitor CRUD + Pass Handling
 # ---------------------------
@@ -27,13 +29,6 @@ from reports.utils import add_to_report_from_visitor
 #     url = f"https://{bucket_name}.s3.{settings.AWS_S3_REGION_NAME}.amazonaws.com/{filename}"
 #     return url
 
-from rest_framework import status
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import AllowAny
-from rest_framework.response import Response
-from django.utils import timezone
-from .models import Visitor
-from .serializers import VisitorSerializer
 
 @api_view(['POST'])
 @permission_classes([AllowAny])  # No authentication required for visitor registration
@@ -99,7 +94,9 @@ def create_visitor(request):
         )
         
         add_to_report_from_visitor(visitor)
-        
+
+        # send_visitor_status_email(status=visitor.status, visitor=visitor)
+
         return Response({
             'id': visitor.id,
             'name': visitor.name,
@@ -161,34 +158,52 @@ class VisitorDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
         # ✅ Capture old status BEFORE updating
         old_status = instance.status  
 
+        # --- Handle Visitor Image Upload ---
         image_file = request.FILES.get("image")
         if image_file:
             filename = f"visitor_images/{image_file.name}"
             image_url = upload_to_s3(image_file, filename)
-            request.data._mutable = True  # allow editing request.data
+            request.data._mutable = True
             request.data["image"] = image_url
             request.data._mutable = False
 
+        # --- Handle Visitor Pass File Upload ---
+        pass_file = request.FILES.get("pass_file")
+        if pass_file:
+            # Only allow PNG/JPG/JPEG
+            allowed_types = ["image/png", "image/jpeg", "image/jpg"]
+            if pass_file.content_type not in allowed_types:
+                return Response(
+                    {"error": "Invalid file type. Only PNG, JPG, and JPEG are allowed."},
+                    status=400
+                )
+
+            filename = f"visitor_passes/{pass_file.name}"
+            pass_file_url = upload_to_s3(pass_file, filename)
+
+            request.data._mutable = True
+            request.data["pass_file"] = pass_file_url
+            request.data._mutable = False
+
+        # --- Save the updated data ---
         serializer = self.get_serializer(instance, data=request.data, partial=partial)
         serializer.is_valid(raise_exception=True)
         self.perform_update(serializer)
 
-        # ✅ Compare new status with old
+        # ✅ Track status change
         if instance.status != old_status:
             VisitorStatusTimeline.objects.create(
                 visitor=instance, status=instance.status, updated_by=request.user
             )
 
-        # ✅ update report after edit
+        # ✅ Update report
         add_to_report_from_visitor(instance)
 
         return Response(serializer.data)
 
 
 
-# ---------------------------
-# Update Visitor Status (check-in, check-out, approve, reject)
-# ---------------------------
+
 class VisitorStatusUpdateAPIView(generics.UpdateAPIView):
     queryset = Visitor.objects.all()
     serializer_class = VisitorSerializer
@@ -197,24 +212,41 @@ class VisitorStatusUpdateAPIView(generics.UpdateAPIView):
     def update(self, request, *args, **kwargs):
         visitor = self.get_object()
         new_status = request.data.get("status")
-        print(f"Updating visitor {visitor.id} status to {new_status}")
+
         if new_status not in dict(Visitor.STATUS_CHOICES):
             return Response({"detail": "Invalid status"}, status=status.HTTP_400_BAD_REQUEST)
 
+        # ✅ Update status and timestamps
         visitor.status = new_status
         if new_status == "checked_in":
             visitor.check_in = now()
         elif new_status == "checked_out":
             visitor.check_out = now()
             visitor.is_active = False
-        visitor.save() 
+        visitor.save()
 
-        # log timeline
+        # ✅ Log status timeline
         VisitorStatusTimeline.objects.create(
             visitor=visitor, status=new_status, updated_by=request.user
         )
 
+        # ✅ Send status email
+        # if checked_in -> attach the pass file (from S3/local)
+        pass_file = None
+        if new_status == "checked_in" and visitor.pass_file:
+            # Download file from S3 using requests
+            import requests
+            response = requests.get(visitor.pass_file)
+            if response.status_code == 200:
+                from django.core.files.base import ContentFile
+                file_content = ContentFile(response.content)
+                file_content.name = visitor.pass_file.split("/")[-1]
+                pass_file = file_content
+
+        # send_visitor_status_email(visitor, pass_file=pass_file)
+
         return Response(VisitorSerializer(visitor).data)
+
 
 
 # ---------------------------

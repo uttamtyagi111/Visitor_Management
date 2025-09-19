@@ -15,6 +15,7 @@ class VisitorSerializer(serializers.ModelSerializer):
             "phone",
             "purpose",
             "image",
+            "pass_file",
             "created_at",
             "issued_by",
             "status",
