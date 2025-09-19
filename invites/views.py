@@ -6,7 +6,8 @@ from django.utils import timezone
 
 from reports.utils import add_to_report_from_invite
 from .models import Invite
-from .serializers import InviteSerializer
+from .serializers import InviteSerializer, InviteStatusTimelineSerializer
+from .models import Invite, InviteStatusTimeline
 import uuid
 
 class InviteListCreateView(generics.ListCreateAPIView):
@@ -44,8 +45,15 @@ class UpdateInviteStatusView(generics.UpdateAPIView):
         if new_status not in dict(Invite._meta.get_field("status").choices):
             return Response({"error": "Invalid status"}, status=status.HTTP_400_BAD_REQUEST)
 
-        invite.status = new_status
-        invite.save()
+        if invite.status != new_status:
+            invite.status = new_status
+            invite.save()
+        
+        InviteStatusTimeline.objects.create(
+                invite=invite,
+                status=new_status,
+                updated_by=request.user
+            )
         
         add_to_report_from_invite(invite)
         
@@ -105,6 +113,17 @@ class CaptureVisitorDataView(APIView):
             {"message": "Visitor data captured", "invite": InviteSerializer(invite).data},
             status=status.HTTP_200_OK
         )
+        
+        
+        
+class InviteTimelineAPIView(generics.ListAPIView):
+    serializer_class = InviteStatusTimelineSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        invite_id = self.kwargs["pk"]
+        return InviteStatusTimeline.objects.filter(invite_id=invite_id)
+
 # views.py
 # from django.http import HttpResponseRedirect
 

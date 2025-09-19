@@ -9,6 +9,7 @@ class Report(models.Model):
     visitor = models.OneToOneField(
         Visitor, on_delete=models.CASCADE, null=True, blank=True, related_name="report"
     )
+    image = models.URLField(blank=True, null=True)
     check_in = models.DateTimeField(blank=True, null=True)
     check_out = models.DateTimeField(blank=True, null=True)
     remarks = models.TextField(blank=True, null=True)

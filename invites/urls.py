@@ -6,6 +6,7 @@ from .views import (
     UpdateInviteStatusView,
     VerifyInviteView,
     CaptureVisitorDataView,
+    InviteTimelineAPIView,
     # ServePassView,
 )
 
@@ -28,4 +29,7 @@ urlpatterns = [
     
     # New: QR verification to serve the pass image
     # path("invites/verify-pass/<str:invite_code>/", ServePassView.as_view(), name="serve-pass"),
+    
+    path("invites/<int:pk>/timeline/", InviteTimelineAPIView.as_view(), name="invite-timeline"),
+
 ]
