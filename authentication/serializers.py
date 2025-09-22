@@ -5,6 +5,7 @@ from .models import PasswordResetToken
 from django.contrib.auth.password_validation import validate_password
 from django.core.cache import cache
 from .utils import generate_otp  # your OTP util
+from django.contrib.auth.password_validation import validate_password
 
 User = get_user_model()
 
@@ -100,7 +101,19 @@ class OTPVerifySerializer(serializers.Serializer):
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ["id", "username", "email", "phone"]
+        fields = [
+            "id",
+            "username",
+            "email",
+            "phone",
+            "avatar",
+            "company",
+            "department",
+            "address",
+            "bio",
+            "date_joined",
+        ]
+        read_only_fields = ["email", "date_joined"]
 
 
 
@@ -135,3 +148,27 @@ class PasswordResetConfirmSerializer(serializers.Serializer):
         user.save()
         token_obj.delete()  # delete after use
         return user
+
+
+class ChangePasswordSerializer(serializers.Serializer):
+    current_password = serializers.CharField(write_only=True)
+    new_password = serializers.CharField(write_only=True, validators=[validate_password])
+    new_password2 = serializers.CharField(write_only=True)
+
+    def validate(self, data):
+        user = self.context["request"].user
+        if not user.check_password(data.get("current_password")):
+            raise serializers.ValidationError({"current_password": "Current password is incorrect."})
+        if data.get("new_password") != data.get("new_password2"):
+            raise serializers.ValidationError({"new_password2": "Passwords do not match."})
+        if data.get("current_password") == data.get("new_password"):
+            raise serializers.ValidationError({"new_password": "New password must be different from current password."})
+        return data
+
+    def save(self, **kwargs):
+        user = self.context["request"].user
+        user.set_password(self.validated_data["new_password"])
+        user.save()
+        return user
+
+

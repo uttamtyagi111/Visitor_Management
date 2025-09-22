@@ -10,9 +10,11 @@ from .serializers import (
     OTPVerifySerializer, 
     UserSerializer, 
     PasswordResetRequestSerializer, 
-    PasswordResetConfirmSerializer
+    PasswordResetConfirmSerializer,
+    ChangePasswordSerializer,
 )
 from .models import PasswordResetToken
+from utils.upload_to_s3 import upload_to_s3
 
 User = get_user_model()
 
@@ -82,12 +84,39 @@ class LoginView(APIView):
         }, status=200)
 
 
-class UserDetailView(generics.RetrieveAPIView):
+class UserDetailView(generics.RetrieveUpdateAPIView):
     serializer_class = UserSerializer
     permission_classes = [permissions.IsAuthenticated]
 
     def get_object(self):
         return self.request.user
+
+    def patch(self, request, *args, **kwargs):
+        user = self.get_object()
+        # Build a plain dict to avoid deep-copying uploaded file objects
+        data = request.data.dict() if hasattr(request.data, "dict") else dict(request.data)
+
+        avatar_file = request.FILES.get("avatar")
+        if avatar_file:
+            # Validate content type (JPG/PNG)
+            allowed_types = ["image/png", "image/jpeg", "image/jpg"]
+            if getattr(avatar_file, "content_type", None) not in allowed_types:
+                return Response({"error": "Invalid file type. Only PNG, JPG, and JPEG are allowed."}, status=400)
+
+            # Validate size (<= 5MB)
+            max_size_bytes = 5 * 1024 * 1024
+            if hasattr(avatar_file, "size") and avatar_file.size > max_size_bytes:
+                return Response({"error": "File too large. Maximum size is 5MB."}, status=400)
+
+            # Upload to S3
+            filename = f"user_avatars/{user.id}_{avatar_file.name}"
+            avatar_url = upload_to_s3(avatar_file, filename)
+            data["avatar"] = avatar_url
+
+        serializer = self.get_serializer(user, data=data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+        return Response(serializer.data)
 
 
 class LogoutView(generics.GenericAPIView):
@@ -134,3 +163,14 @@ class PasswordResetConfirmView(generics.GenericAPIView):
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response({"message": "Password reset successful."}, status=status.HTTP_200_OK)
+
+
+class ChangePasswordView(generics.GenericAPIView):
+    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = ChangePasswordSerializer
+
+    def post(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data, context={"request": request})
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response({"message": "Password changed successfully."}, status=status.HTTP_200_OK)

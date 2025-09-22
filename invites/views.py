@@ -8,6 +8,7 @@ from reports.utils import add_to_report_from_invite
 from .models import Invite
 from .serializers import InviteSerializer, InviteStatusTimelineSerializer
 from .models import Invite, InviteStatusTimeline
+from .utils import send_invite_email
 import uuid
 
 class InviteListCreateView(generics.ListCreateAPIView):
@@ -17,7 +18,20 @@ class InviteListCreateView(generics.ListCreateAPIView):
 
     def perform_create(self, serializer):
         short_code = str(uuid.uuid4()).replace("-", "")[:6]  # ✅ 6 chars
-        serializer.save(invited_by=self.request.user, invite_code=short_code)
+        invite = serializer.save(invited_by=self.request.user, invite_code=short_code)
+        # add initial timeline entry
+        try:
+            InviteStatusTimeline.objects.create(
+                invite=invite,
+                status="created",
+                updated_by=self.request.user,
+            )
+            send_invite_email(invite, self.request)
+            print ("Invite email sent successfully.")
+            
+        except Exception as e:
+            print (f"Failed to create invite status timeline: {e}")
+            pass
 
 class InviteDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Invite.objects.all()
@@ -41,7 +55,6 @@ class UpdateInviteStatusView(generics.UpdateAPIView):
     def patch(self, request, *args, **kwargs):
         invite = self.get_object()
         new_status = request.data.get("status")
-
         if new_status not in dict(Invite._meta.get_field("status").choices):
             return Response({"error": "Invalid status"}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -104,6 +117,12 @@ class CaptureVisitorDataView(APIView):
         invite.image = image_url
         invite.status = "pending"
         invite.save(update_fields=["image", "status"])
+        
+        InviteStatusTimeline.objects.create(
+                invite=invite,
+                status="pending",
+                updated_by=request.user if request.user.is_authenticated else None
+            )
         # add_to_report_from_invite(invite)
 
         # # ✅ Generate QR code (uploads to S3 too)

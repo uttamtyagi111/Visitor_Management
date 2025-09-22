@@ -74,34 +74,27 @@ def total_visitors_stat(request):
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
 def active_visits_stat(request):
-    """API for Active Visits card"""
     try:
-        # Active visits = checked in but not checked out
-        active_count = Report.objects.filter(
+        active_qs = Report.objects.filter(
             check_in__isnull=False,
             check_out__isnull=True
-        ).count()
-        
-        # Get active visitors details
-        active_visitors = Report.objects.filter(
-            check_in__isnull=False,
-            check_out__isnull=True
-        ).select_related('visitor', 'invite')[:5]  # Latest 5 for preview
-        
+        )
+        active_count = active_qs.count()
+
+        limit = int(request.GET.get('limit', 5))
+        active_visitors = active_qs.select_related('visitor', 'invite').order_by('-check_in')[:limit]
+
         active_details = []
         for report in active_visitors:
-            visitor_name = "Unknown"
-            if report.visitor:
-                visitor_name = report.visitor.name
-            elif report.invite:
-                visitor_name = report.invite.visitor_name
-                
+            visitor_name = report.visitor.name if report.visitor else (
+                report.invite.visitor_name if report.invite else "Unknown"
+            )
             active_details.append({
                 'name': visitor_name,
                 'check_in_time': report.check_in.isoformat(),
                 'duration': get_time_since(report.check_in)
             })
-        
+
         return Response({
             'success': True,
             'data': {
