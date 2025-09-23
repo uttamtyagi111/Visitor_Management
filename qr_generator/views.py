@@ -53,20 +53,20 @@ class QRCodeListCreateView(generics.ListCreateAPIView):
         img = qr.make_image(fill_color=foreground, back_color=background).convert("RGB")
 
         # Handle logo upload
-        logo_file = request.FILES.get("logo")
-        logo_url = None
-        if logo_file:
-            logo = Image.open(logo_file)
-            qr_width, qr_height = img.size
-            logo_size = qr_width // 4
-            logo.thumbnail((logo_size, logo_size))
-            xpos = (qr_width - logo.width) // 2
-            ypos = (qr_height - logo.height) // 2
-            img.paste(logo, (xpos, ypos), mask=logo if logo.mode == "RGBA" else None)
+        # logo_file = request.FILES.get("logo")
+        # logo_url = None
+        # if logo_file:
+        #     logo = Image.open(logo_file)
+        #     qr_width, qr_height = img.size
+        #     logo_size = qr_width // 4
+        #     logo.thumbnail((logo_size, logo_size))
+        #     xpos = (qr_width - logo.width) // 2
+        #     ypos = (qr_height - logo.height) // 2
+        #     img.paste(logo, (xpos, ypos), mask=logo if logo.mode == "RGBA" else None)
 
-            # Upload logo to S3 and get URL
-            logo_file.seek(0)
-            logo_url = upload_to_s3(logo_file, f"qr_logos/{logo_file.name}")
+        #     # Upload logo to S3 and get URL
+        #     logo_file.seek(0)
+        #     logo_url = upload_to_s3(logo_file, f"qr_logos/{logo_file.name}")
 
         # Resize QR
         img = img.resize((size, size))
@@ -81,7 +81,7 @@ class QRCodeListCreateView(generics.ListCreateAPIView):
         serializer.save(
             text=data,
             image=qr_content,
-            logo=logo_url,
+            # logo=logo_url,
             size=size,
             error_correction=error_correction,
             background=background,

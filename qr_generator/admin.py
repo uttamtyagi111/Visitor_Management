@@ -12,10 +12,10 @@ class QRCodeAdmin(admin.ModelAdmin):
         "error_correction",
         "background",
         "foreground",
-        "logo",
+        # "logo",
         "created_at",
     )
-    search_fields = ("text", "created_by__username", "logo")
+    search_fields = ("text", "created_by__username")
     list_filter = ("error_correction", "created_at", "created_by")
     readonly_fields = ("created_at",)
 

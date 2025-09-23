@@ -120,8 +120,8 @@ WSGI_APPLICATION = 'visitor_management.wsgi.application'
 
 # Database
 # https://docs.djangoproject.com/en/5.0/ref/settings/#databases
-import os
-import dj_database_url
+# import os
+# import dj_database_url
 
 import os
 import dj_database_url
