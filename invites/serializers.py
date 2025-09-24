@@ -15,7 +15,7 @@ class InviteSerializer(serializers.ModelSerializer):
         fields = [
             "id", "invited_by",
             "visitor_name", "visitor_email", "visitor_phone", "purpose",
-            "visit_time", "expiry_time",   # ✅ keep visit timings
+            "visit_time", "expiry_time","checked_out",   # ✅ keep visit timings
             "invite_code",                 # ✅ unique invite code
             "image",                       # ✅ uploaded image
             "status", "qr_code", "pass_image",         # ✅ QR code + status+ pass_image

@@ -13,6 +13,7 @@ User = get_user_model()
 class Invite(models.Model):
     STATUS_CHOICES = [
         ("created", "Created"),
+        ("reinvited", "Reinvited"),
         ("pending", "Pending"),
         ("approved", "Approved"),
         ("checked_in", "Checked In"),
@@ -27,7 +28,7 @@ class Invite(models.Model):
     purpose = models.TextField(blank=True, null=True)
     visit_time = models.DateTimeField()
     expiry_time = models.DateTimeField(null=True, blank=True)
-
+    checked_out = models.DateTimeField(null=True, blank=True)
     invite_code = models.CharField(max_length=6, unique=True, editable=False,null=True, blank=True)
     image = models.URLField(blank=True, null=True)   # ✅ S3 image URL
     qr_code = models.URLField(blank=True, null=True)
