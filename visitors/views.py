@@ -9,109 +9,105 @@ from .serializers import VisitorSerializer, VisitorStatusTimelineSerializer
 from utils.upload_to_s3 import upload_to_s3
 from reports.utils import add_to_report_from_visitor
 from visitors.utils import send_visitor_status_email
-# ---------------------------
-# Visitor CRUD + Pass Handling
-# ---------------------------
-
-# s3_client = boto3.client(
-#     "s3",
-#     aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
-#     aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
-#     region_name=settings.AWS_S3_REGION_NAME,
-# )
-
-# def upload_to_s3(file_obj, filename):
-#     """
-#     Uploads a file object to S3 and returns the URL.
-#     """
-#     bucket_name = settings.AWS_STORAGE_BUCKET_NAME
-#     s3_client.upload_fileobj(file_obj, bucket_name, filename, ExtraArgs={'ACL': 'public-read'})
-#     url = f"https://{bucket_name}.s3.{settings.AWS_S3_REGION_NAME}.amazonaws.com/{filename}"
-#     return url
 
 
 @api_view(['POST'])
-@permission_classes([AllowAny])  # No authentication required for visitor registration
+@permission_classes([AllowAny])  # Anyone can register
 def create_visitor(request):
-    """Create a new visitor registration"""
+    """
+    Create or update a visitor based on email.
+    - New visitor: Creates a new record with status 'pending' (image = None initially)
+    - Returning visitor: Updates phone/purpose, keeps name, marks status 'revisit'
+    """
     try:
-        # Extract data from request
-        visitor_data = {
-            'name': request.data.get('name', '').strip(),
-            'phone': request.data.get('phone', '').strip(),
-            'email': request.data.get('email', '').strip(),
-            'purpose': request.data.get('purpose', ''),
-            'status': 'pending',  # Always starts as pending
-        }
-        
-        # Validate required fields
-        if not visitor_data['name']:
-            return Response({
-                'error': 'Name is required'
-            }, status=status.HTTP_400_BAD_REQUEST)
-        
-        if not visitor_data['phone']:
-            return Response({
-                'error': 'Phone number is required'
-            }, status=status.HTTP_400_BAD_REQUEST)
-        
-        # Check if image is provided (required)
-        if 'image' not in request.FILES:
-            return Response({
-                'error': 'Image is required'
-            }, status=status.HTTP_400_BAD_REQUEST)
-        
-        image_file = request.FILES['image']
-        
-        # Basic image validation
-        if not image_file.name.lower().endswith(('.jpg', '.jpeg', '.png')):
-            return Response({
-                'error': 'Only JPG, JPEG, and PNG files are allowed'
-            }, status=status.HTTP_400_BAD_REQUEST)
-        
-        # Create visitor
-        visitor = Visitor.objects.create(**visitor_data)
-        
-        # Upload image to S3
-        filename = f"visitor_images/{visitor.id}_{image_file.name}"
-        image_url = upload_to_s3(image_file, filename)
-        
-        if not image_url:
-            # Delete visitor if image upload fails
-            visitor.delete()
-            return Response({
-                'error': 'Image upload failed'
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        
-        # Update visitor with image URL
-        visitor.image = image_url
-        visitor.save()
-        
-        VisitorStatusTimeline.objects.create(
-            visitor=visitor,
-            status=visitor.status,
-            updated_by=None  # no user since it’s self-registration
-        )
-        
-        add_to_report_from_visitor(visitor)
+        email = request.data.get('email', '').strip()
+        name = request.data.get('name', '').strip()
+        phone = request.data.get('phone', '').strip()
+        purpose = request.data.get('purpose', '').strip()
 
-        # send_visitor_status_email(status=visitor.status, visitor=visitor)
+        # ✅ Validate required fields
+        if not email:
+            return Response({'error': 'Email is required'}, status=status.HTTP_400_BAD_REQUEST)
+        if not name:
+            return Response({'error': 'Name is required'}, status=status.HTTP_400_BAD_REQUEST)
+        if not phone:
+            return Response({'error': 'Phone number is required'}, status=status.HTTP_400_BAD_REQUEST)
 
-        return Response({
-            'id': visitor.id,
-            'name': visitor.name,
-            'phone': visitor.phone,
-            'email': visitor.email,
-            'status': visitor.status,
-            'image': visitor.image,
-            'created_at': visitor.created_at,
-            'message': 'Visitor registered successfully. Please wait for approval.'
-        }, status=status.HTTP_201_CREATED)
-        
+        # ✅ Check if visitor exists by email
+        visitor = Visitor.objects.filter(email=email).first()
+
+        if visitor:
+            # --------------------------
+            # Returning visitor
+            # --------------------------
+            visitor.phone = phone  # Update phone
+            if purpose:
+                visitor.purpose = purpose  # Update purpose if provided
+            visitor.status = "revisit"  # ✅ Mark as revisit
+            visitor.save()
+
+            # ✅ Add timeline entry
+            VisitorStatusTimeline.objects.create(
+                visitor=visitor,
+                status=visitor.status,
+                updated_by=None
+            )
+
+            # ✅ Increment visit_count in Report
+            add_to_report_from_visitor(visitor)
+            send_visitor_status_email(visitor)
+
+            return Response({
+                'id': visitor.id,
+                'name': visitor.name,
+                'email': visitor.email,
+                'phone': visitor.phone,
+                'purpose': visitor.purpose,
+                'status': visitor.status,
+                'image': visitor.image,  # may be existing
+                'visit_count': visitor.report.visit_count if hasattr(visitor, "report") else 1,
+                'message': 'Returning visitor recorded as revisit.'
+            }, status=status.HTTP_200_OK)
+
+        else:
+            # --------------------------
+            # New visitor (image = None for now)
+            # --------------------------
+            visitor = Visitor.objects.create(
+                name=name,
+                email=email,
+                phone=phone,
+                purpose=purpose,
+                status='created',
+                image=None
+            )
+
+            # ✅ Add initial timeline
+            VisitorStatusTimeline.objects.create(
+                visitor=visitor,
+                status=visitor.status,
+                updated_by=None
+            )
+
+            # ✅ Create report record
+            add_to_report_from_visitor(visitor)
+            send_visitor_status_email(visitor)
+
+            return Response({
+                'id': visitor.id,
+                'name': visitor.name,
+                'email': visitor.email,
+                'phone': visitor.phone,
+                'purpose': visitor.purpose,
+                'status': visitor.status,
+                'image': visitor.image,  # will be null
+                'visit_count': 1,
+                'message': 'New visitor registered successfully (image pending upload).'
+            }, status=status.HTTP_201_CREATED)
+
     except Exception as e:
-        return Response({
-            'error': str(e)
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 @api_view(['GET'])
 @permission_classes([AllowAny])
@@ -145,32 +141,43 @@ class VisitorListCreateAPIView(generics.ListCreateAPIView):
             print("No image uploaded.")
             
         add_to_report_from_visitor(visitor)
+        send_visitor_status_email(visitor)
 
 class VisitorDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Visitor.objects.all().select_related("issued_by")
     serializer_class = VisitorSerializer
-    permission_classes = [IsAuthenticated]
-    
-    def update(self, request, *args, **kwargs):
-        partial = kwargs.pop("partial", False)
-        instance = self.get_object()
+    permission_classes = [AllowAny]
 
+    def update(self, request, *args, **kwargs):
+        if request.method != "PATCH":
+            return Response(
+                {"error": "Only PATCH method is allowed for updates."},
+                status=status.HTTP_405_METHOD_NOT_ALLOWED,
+            )
+
+        partial = True
+        instance = self.get_object()
+        
         # ✅ Capture old status BEFORE updating
         old_status = instance.status  
 
         # --- Handle Visitor Image Upload ---
         image_file = request.FILES.get("image")
         if image_file:
-            filename = f"visitor_images/{image_file.name}"
+            filename = f"visitor_images/{instance.id}_{image_file.name}"
             image_url = upload_to_s3(image_file, filename)
+
             request.data._mutable = True
             request.data["image"] = image_url
+            request.data["status"] = "pending"  # ✅ FIX: Put status in request.data
             request.data._mutable = False
+            
+            # ❌ REMOVE: Don't set instance.status here
+            # instance.status = "pending"  
 
         # --- Handle Visitor Pass File Upload ---
         pass_file = request.FILES.get("pass_file")
         if pass_file:
-            # Only allow PNG/JPG/JPEG
             allowed_types = ["image/png", "image/jpeg", "image/jpg"]
             if pass_file.content_type not in allowed_types:
                 return Response(
@@ -178,7 +185,7 @@ class VisitorDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
                     status=400
                 )
 
-            filename = f"visitor_passes/{pass_file.name}"
+            filename = f"visitor_passes/{instance.id}_{pass_file.name}"
             pass_file_url = upload_to_s3(pass_file, filename)
 
             request.data._mutable = True
@@ -188,16 +195,22 @@ class VisitorDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
         # --- Save the updated data ---
         serializer = self.get_serializer(instance, data=request.data, partial=partial)
         serializer.is_valid(raise_exception=True)
-        self.perform_update(serializer)
+        updated_instance = serializer.save()  # ✅ FIX: Get the saved instance
 
-        # ✅ Track status change
-        if instance.status != old_status:
+        # ✅ FIX: Use the saved instance status
+        final_status = updated_instance.status
+        
+        # ✅ Track status change with correct status
+        if final_status != old_status:
             VisitorStatusTimeline.objects.create(
-                visitor=instance, status=instance.status, updated_by=request.user
+                visitor=updated_instance,  # ✅ Use updated instance
+                status=final_status,       # ✅ Use final status
+                updated_by=request.user if request.user.is_authenticated else None
             )
+            print(f"✅ Timeline created: {old_status} → {final_status}")
 
         # ✅ Update report
-        add_to_report_from_visitor(instance)
+        add_to_report_from_visitor(updated_instance)
 
         return Response(serializer.data)
 
@@ -243,7 +256,7 @@ class VisitorStatusUpdateAPIView(generics.UpdateAPIView):
                 file_content.name = visitor.pass_file.split("/")[-1]
                 pass_file = file_content
 
-        # send_visitor_status_email(visitor, pass_file=pass_file)
+        send_visitor_status_email(visitor, pass_file=pass_file)
 
         return Response(VisitorSerializer(visitor).data)
 

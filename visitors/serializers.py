@@ -4,6 +4,8 @@ from .models import Visitor, VisitorStatusTimeline
 
 class VisitorSerializer(serializers.ModelSerializer):
     timelines = serializers.SerializerMethodField()
+    image = serializers.CharField(read_only=True)
+    pass_file = serializers.CharField(read_only=True)
     # image = serializers.ImageField(write_only=True, required=False)   
 
     class Meta:
@@ -24,7 +26,7 @@ class VisitorSerializer(serializers.ModelSerializer):
             "is_active",
             "timelines",
         ]
-        read_only_fields = ["created_at", "check_in", "check_out", "is_active", "timelines"]
+        read_only_fields = ["created_at", "check_in", "check_out", "is_active", "timelines", "image", "pass_file"]
 
     def get_timelines(self, obj):
         timelines = obj.status_timelines.all()

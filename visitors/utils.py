@@ -21,6 +21,10 @@ def send_visitor_status_email(visitor, pass_file=None):
     elif visitor.status == "approved":
         subject = "Visitor Registration Approved"
         message = f"Dear {visitor.name},\n\nYour registration has been approved. Please visit reception to collect your pass.\n\nRegards,\nVisitor Management Team"
+        
+    elif visitor.status == "revisit":
+        subject = "Visitor Registration Revisit"
+        message = f"Dear {visitor.name},\n\nYour registration has been marked as a revisit. Please visit reception to collect your pass.\n\nRegards,\nVisitor Management Team"
 
     elif visitor.status == "rejected":
         subject = "Visitor Registration Rejected"

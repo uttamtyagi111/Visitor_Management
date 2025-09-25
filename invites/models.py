@@ -23,7 +23,7 @@ class Invite(models.Model):
 
     invited_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name="invites")
     visitor_name = models.CharField(max_length=100)
-    visitor_email = models.EmailField()
+    visitor_email = models.EmailField(unique=True)
     visitor_phone = models.CharField(max_length=15, blank=True, null=True)
     purpose = models.TextField(blank=True, null=True)
     visit_time = models.DateTimeField()

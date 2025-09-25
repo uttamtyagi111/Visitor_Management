@@ -54,6 +54,11 @@ class ReinviteAPIView(APIView):
 
         # ✅ Generate new invite_code
         invite.invite_code = str(uuid.uuid4()).replace("-", "")[:6]
+        data = request.data
+        # If somehow request.data is not a dict (e.g., int), wrap it
+        if not isinstance(data, dict):
+            return Response({"detail": "Invalid data format, expected JSON object."},
+                            status=status.HTTP_400_BAD_REQUEST)
 
         # ✅ Get new data from frontend
         visit_time = request.data.get("visit_time")
@@ -146,7 +151,7 @@ class VerifyInviteView(APIView):
         # Check expiry
         if invite.expiry_time and invite.expiry_time < timezone.now():
             return Response({"error": "Invite expired"}, status=status.HTTP_400_BAD_REQUEST)
-
+        print("Invite verified:", invite.__dict__)
         return Response(InviteSerializer(invite).data, status=status.HTTP_200_OK)
 
 from utils.upload_to_s3 import upload_to_s3
