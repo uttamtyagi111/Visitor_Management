@@ -1,3 +1,4 @@
+from urllib import request
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework import generics, status, filters
 from rest_framework.response import Response
@@ -6,7 +7,7 @@ from django.utils.timezone import now
 import django_filters
 from .models import Visitor, VisitorStatusTimeline
 from .serializers import VisitorSerializer, VisitorStatusTimelineSerializer
-from utils.upload_to_s3 import upload_to_s3
+from utils.upload_to_s3 import upload_to_s3,delete_from_s3
 from reports.utils import add_to_report_from_visitor
 from visitors.utils import send_visitor_status_email
 
@@ -155,25 +156,31 @@ class VisitorDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
                 status=status.HTTP_405_METHOD_NOT_ALLOWED,
             )
 
-        partial = True
         instance = self.get_object()
-        
-        # ✅ Capture old status BEFORE updating
-        old_status = instance.status  
+        old_status = instance.status  # ✅ Capture old status
+        partial = True  
+
+        # --- Make a mutable copy of request.data ---
+        data = request.data.copy()
 
         # --- Handle Visitor Image Upload ---
         image_file = request.FILES.get("image")
         if image_file:
             filename = f"visitor_images/{instance.id}_{image_file.name}"
-            image_url = upload_to_s3(image_file, filename)
+            try:
+                image_url = upload_to_s3(image_file, filename)
+            except Exception as e:
+                return Response({"error": f"Image upload failed: {str(e)}"}, status=500)
 
-            request.data._mutable = True
-            request.data["image"] = image_url
-            request.data["status"] = "pending"  # ✅ FIX: Put status in request.data
-            request.data._mutable = False
+            if not image_url:
+                return Response({"error": "Image upload failed - no URL returned"}, status=500)
             
-            # ❌ REMOVE: Don't set instance.status here
-            # instance.status = "pending"  
+            if instance.image:
+                delete_from_s3(instance.image)
+                print("Old image deleted from S3:", instance.image)
+            
+            data["image"] = image_url
+            data["status"] = "pending"  # ✅ Force status to pending on new image upload
 
         # --- Handle Visitor Pass File Upload ---
         pass_file = request.FILES.get("pass_file")
@@ -187,33 +194,25 @@ class VisitorDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
 
             filename = f"visitor_passes/{instance.id}_{pass_file.name}"
             pass_file_url = upload_to_s3(pass_file, filename)
-
-            request.data._mutable = True
-            request.data["pass_file"] = pass_file_url
-            request.data._mutable = False
+            data["pass_file"] = pass_file_url
 
         # --- Save the updated data ---
-        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer = self.get_serializer(instance, data=data, partial=partial)
         serializer.is_valid(raise_exception=True)
-        updated_instance = serializer.save()  # ✅ FIX: Get the saved instance
+        updated_instance = serializer.save()  # ✅ Persist changes to DB
 
-        # ✅ FIX: Use the saved instance status
-        final_status = updated_instance.status
-        
-        # ✅ Track status change with correct status
-        if final_status != old_status:
+        # ✅ Track status change
+        if updated_instance.status != old_status:
             VisitorStatusTimeline.objects.create(
-                visitor=updated_instance,  # ✅ Use updated instance
-                status=final_status,       # ✅ Use final status
+                visitor=updated_instance,
+                status=updated_instance.status,
                 updated_by=request.user if request.user.is_authenticated else None
             )
-            print(f"✅ Timeline created: {old_status} → {final_status}")
 
         # ✅ Update report
         add_to_report_from_visitor(updated_instance)
 
         return Response(serializer.data)
-
 
 
 
