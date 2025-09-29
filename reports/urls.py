@@ -1,6 +1,7 @@
 from rest_framework.routers import DefaultRouter
 from django.urls import path, include
 from .views import (
+    ExportReportAPIView,
     ReportViewSet,
     
     # Individual Stats Cards APIs
@@ -38,4 +39,8 @@ urlpatterns = [
     
     # ===== RECENT ACTIVITY API =====
     path('activity/recent/', recent_activity_feed, name='recent-activity-feed'),
+    
+
+    # ===== EXPORT API =====
+    path("export-reports/", ExportReportAPIView.as_view(), name="export-reports"),
 ]

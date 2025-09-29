@@ -6,12 +6,12 @@ def add_to_report_from_visitor(visitor):
         visitor=visitor,
         defaults={
             "check_in": timezone.now(),
-            "visit_count": 1,
+            
         },
     )
 
     if not created:
-        report.increment_visit()
+        # report.increment_visit()
         report.check_in = timezone.now()
         report.save(update_fields=["check_in", "visit_count"])
 
@@ -25,12 +25,12 @@ def add_to_report_from_invite(invite):
             invite=invite,
             defaults={
                 "check_in": timezone.now(),
-                "visit_count": 1,
+                # "visit_count": 1,
             },
         )
 
         if not created:
-            report.increment_visit()
+            # report.increment_visit()
             report.check_in = timezone.now()  # update last check-in time
             report.save(update_fields=["check_in", "visit_count"])
 

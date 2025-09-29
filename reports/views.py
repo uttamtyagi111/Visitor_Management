@@ -560,3 +560,79 @@ def get_time_since(datetime_obj):
         return f"{minutes} minutes"
     else:
         return "< 1 minute"
+    
+    # reports/views.py
+import csv
+import openpyxl
+from django.http import HttpResponse
+from rest_framework.views import APIView
+from rest_framework.permissions import IsAuthenticated
+from django.utils import timezone
+from .models import Report
+
+
+class ExportReportAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        export_format = request.GET.get("format", "csv")  # csv or excel
+        date_filter = request.GET.get("date", None)       # today, this_week, etc.
+        type_filter = request.GET.get("type", None)       # visitors or invites
+
+        reports = Report.objects.all()
+
+        # Example date filter
+        if date_filter == "today":
+            today = timezone.now().date()
+            reports = reports.filter(check_in__date=today)
+
+        # === CSV EXPORT ===
+        if export_format == "csv":
+            response = HttpResponse(content_type="text/csv")
+            response["Content-Disposition"] = 'attachment; filename="reports.csv"'
+
+            writer = csv.writer(response)
+            writer.writerow(["Visitor", "Check In", "Check Out", "Visit Count", "Remarks"])
+
+            for report in reports:
+                visitor_name = (
+                    report.visitor.name if report.visitor else report.invite.visitor_name if report.invite else "Unknown"
+                )
+                writer.writerow([
+                    visitor_name,
+                    report.check_in,
+                    report.check_out,
+                    report.visit_count,
+                    report.remarks,
+                ])
+            return response
+
+        # === EXCEL EXPORT ===
+        elif export_format == "excel":
+            workbook = openpyxl.Workbook()
+            sheet = workbook.active
+            sheet.title = "Reports"
+
+            # Header
+            headers = ["Visitor", "Check In", "Check Out", "Visit Count", "Remarks"]
+            sheet.append(headers)
+
+            # Rows
+            for report in reports:
+                visitor_name = (
+                    report.visitor.name if report.visitor else report.invite.visitor_name if report.invite else "Unknown"
+                )
+                sheet.append([
+                    visitor_name,
+                    str(report.check_in) if report.check_in else "",
+                    str(report.check_out) if report.check_out else "",
+                    report.visit_count,
+                    report.remarks,
+                ])
+
+            response = HttpResponse(content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            response["Content-Disposition"] = 'attachment; filename="reports.xlsx"'
+            workbook.save(response)
+            return response
+
+        return HttpResponse("Invalid format", status=400)

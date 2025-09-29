@@ -6,12 +6,13 @@ class ReportSerializer(serializers.ModelSerializer):
     invite_data = serializers.SerializerMethodField()
     visitor_name = serializers.SerializerMethodField()
     image = serializers.SerializerMethodField()
+    status = serializers.SerializerMethodField()
 
     class Meta:
         model = Report
         fields = [
             "id", "visitor_name", "check_in", "check_out", "remarks", 
-            "visit_count", "visitor_data", "invite_data", "image"
+            "visit_count", "visitor_data", "invite_data", "image", "status" 
         ]
 
     def get_visitor_data(self, obj):
@@ -52,4 +53,12 @@ class ReportSerializer(serializers.ModelSerializer):
             return obj.visitor.image
         if obj.invite and obj.invite.image:
             return obj.invite.image
+        return None
+    
+    
+    def get_status(self, obj):
+        if obj.visitor:
+            return obj.visitor.status
+        if obj.invite:
+            return obj.invite.status
         return None

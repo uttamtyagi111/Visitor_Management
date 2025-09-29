@@ -109,7 +109,7 @@ class InviteDetailByCodeView(generics.RetrieveAPIView):
     permission_classes = []  # ❌ No login required for users
     lookup_field = "invite_code"
 
-# ✅ Unified status update instead of 3 separate views
+
 class UpdateInviteStatusView(generics.UpdateAPIView):
     queryset = Invite.objects.all()
     serializer_class = InviteSerializer
@@ -118,23 +118,38 @@ class UpdateInviteStatusView(generics.UpdateAPIView):
     def patch(self, request, *args, **kwargs):
         invite = self.get_object()
         new_status = request.data.get("status")
+        check_in = request.data.get("visit_time")   # frontend sends visit_time as check-in
+        checked_out = request.data.get("checked_out")  # optional
+
+        # Validate status
         if new_status not in dict(Invite._meta.get_field("status").choices):
             return Response({"error": "Invalid status"}, status=status.HTTP_400_BAD_REQUEST)
 
+        # Update status if changed
         if invite.status != new_status:
             invite.status = new_status
-            invite.save()
-        
+
+        # Update check-in and check-out if provided
+        if check_in:
+            invite.visit_time = check_in  # treat as check-in
+        if checked_out:
+            invite.checked_out = checked_out
+
+        invite.save(update_fields=["status", "visit_time", "checked_out"])
+
+        # Track timeline
         InviteStatusTimeline.objects.create(
-                invite=invite,
-                status=new_status,
-                updated_by=request.user
-            )
-        
+            invite=invite,
+            status=new_status,
+            updated_by=request.user
+        )
+
+        # Update report with check-in/out
         add_to_report_from_invite(invite)
+
+        # Send email if needed
         send_invite_email(invite, request)
-        
-        
+
         return Response(InviteSerializer(invite).data, status=status.HTTP_200_OK)
 
 
