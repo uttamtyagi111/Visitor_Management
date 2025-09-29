@@ -64,12 +64,29 @@ class LoginView(APIView):
         password = request.data.get("password")
 
         if not email or not password:
-            return Response({"error": "Email and password are required"}, status=400)
+            return Response(
+                {"error": "Email and password are required"},
+                status=400
+            )
 
+        # ✅ Check if user exists
+        try:
+            user_obj = User.objects.get(email=email)
+        except User.DoesNotExist:
+            return Response(
+                {"error": "No active user with this email exists"},
+                status=404
+            )
+
+        # ✅ Authenticate with password
         user = authenticate(request, username=email, password=password)
         if user is None:
-            return Response({"error": "Invalid email or password"}, status=401)
+            return Response(
+                {"error": "Email or password is incorrect"},
+                status=401
+            )
 
+        # ✅ Successful login
         refresh = RefreshToken.for_user(user)
         return Response({
             "message": "Login successful",
@@ -82,6 +99,7 @@ class LoginView(APIView):
                 "role": getattr(user, "role", None),
             }
         }, status=200)
+
 
 
 class UserDetailView(generics.RetrieveUpdateAPIView):

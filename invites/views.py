@@ -1,6 +1,6 @@
 from rest_framework import generics, status
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated,AllowAny
 from rest_framework.views import APIView
 from django.utils import timezone
 from reports.utils import add_to_report_from_invite
@@ -8,6 +8,7 @@ from .models import Invite
 from .serializers import InviteSerializer, InviteStatusTimelineSerializer
 from .models import Invite, InviteStatusTimeline
 from .utils import send_invite_email
+from utils.upload_to_s3 import upload_to_s3, delete_from_s3
 import uuid
 
 class InviteListCreateView(generics.ListCreateAPIView):
@@ -98,7 +99,7 @@ class ReinviteAPIView(APIView):
 class InviteDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Invite.objects.all()
     serializer_class = InviteSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]  # Change as needed
     lookup_field = "pk"
 
 
@@ -154,14 +155,14 @@ class VerifyInviteView(APIView):
         print("Invite verified:", invite.__dict__)
         return Response(InviteSerializer(invite).data, status=status.HTTP_200_OK)
 
-from utils.upload_to_s3 import upload_to_s3
+
 
 class CaptureinviteDataView(APIView):
     """
-    Capture invite's image, upload to S3, update status to 'pending',
-    and generate a QR code if not already created.
+    Update invite's image (PATCH only), upload to S3,
+    delete old image after new upload, and update status to 'pending'.
     """
-    def post(self, request, *args, **kwargs):
+    def patch(self, request, *args, **kwargs):
         code = request.data.get("invite_code")
         try:
             invite = Invite.objects.get(invite_code=code)
@@ -172,32 +173,40 @@ class CaptureinviteDataView(APIView):
         if not image_file:
             return Response({"error": "Image is required"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # ✅ Upload to S3
+        # ✅ Upload new image first
         filename = f"invites_images/{invite.invite_code}.png"
-        image_url = upload_to_s3(image_file, filename)
+        new_image_url = upload_to_s3(image_file, filename)
 
-        # ✅ Save image URL + update status
-        invite.image = image_url
+        if not new_image_url:
+            return Response({"error": "Image upload failed"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        # ✅ Delete old image AFTER new one uploaded
+        if invite.image:
+            try:
+                delete_from_s3(invite.image)
+            except Exception as e:
+                print(f"⚠️ Failed to delete old invite image: {str(e)}")
+
+        # ✅ Save new image URL + update status
+        invite.image = new_image_url
         invite.status = "pending"
         invite.save(update_fields=["image", "status"])
-        
-        InviteStatusTimeline.objects.create(
-                invite=invite,
-                status="pending",
-                updated_by=request.user if request.user.is_authenticated else None
-            )
-        send_invite_email(invite, request)
-        # add_to_report_from_invite(invite)
 
-        # # ✅ Generate QR code (uploads to S3 too)
-        # invite.generate_pass_and_qr()
+        # ✅ Add timeline entry
+        InviteStatusTimeline.objects.create(
+            invite=invite,
+            status="pending",
+            updated_by=request.user if request.user.is_authenticated else None
+        )
+
+        # ✅ Send notification
+        send_invite_email(invite, request)
 
         return Response(
-            {"message": "Invites data captured", "invite": InviteSerializer(invite).data},
+            {"message": "Invite data updated", "invite": InviteSerializer(invite).data},
             status=status.HTTP_200_OK
         )
-        
-        
+
         
 class InviteTimelineAPIView(generics.ListAPIView):
     serializer_class = InviteStatusTimelineSerializer

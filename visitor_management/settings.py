@@ -123,29 +123,29 @@ WSGI_APPLICATION = 'visitor_management.wsgi.application'
 # import os
 # import dj_database_url
 
-# import os
-# import dj_database_url
-# # from dotenv import load_dotenv
+import os
+import dj_database_url
+# from dotenv import load_dotenv
 
-# # load_dotenv()  # This reads .env file
-
-# DATABASES = {
-#     "default": dj_database_url.parse(
-#         config("DATABASE_URL")
-#     )
-# }
-
+# load_dotenv()  # This reads .env file
 
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': config('DB_NAME'),
-        'USER': config('DB_USER'),
-        'PASSWORD': config('DB_PASSWORD'),
-        'HOST': config('DB_HOST', default='localhost'),
-        'PORT': config('DB_PORT', default='5432'),
-    }
+    "default": dj_database_url.parse(
+        config("DATABASE_URL")
+    )
 }
+
+
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.postgresql',
+#         'NAME': config('DB_NAME'),
+#         'USER': config('DB_USER'),
+#         'PASSWORD': config('DB_PASSWORD'),
+#         'HOST': config('DB_HOST', default='localhost'),
+#         'PORT': config('DB_PORT', default='5432'),
+#     }
+# }
 
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=30),
