@@ -110,6 +110,8 @@ class InviteDetailByCodeView(generics.RetrieveAPIView):
     lookup_field = "invite_code"
 
 
+
+
 class UpdateInviteStatusView(generics.UpdateAPIView):
     queryset = Invite.objects.all()
     serializer_class = InviteSerializer
@@ -131,11 +133,27 @@ class UpdateInviteStatusView(generics.UpdateAPIView):
 
         # Update check-in and check-out if provided
         if check_in:
-            invite.visit_time = check_in  # treat as check-in
+            invite.visit_time = check_in
         if checked_out:
             invite.checked_out = checked_out
 
-        invite.save(update_fields=["status", "visit_time", "checked_out"])
+        # --- Handle pass upload if provided ---
+        pass_file = request.FILES.get("pass_file")
+        if pass_file and new_status in ["checked_in", "revisit"]:
+            # Delete old pass first
+            if invite.pass_image:
+                try:
+                    delete_from_s3(invite.pass_image)
+                except Exception as e:
+                    print(f"⚠️ Failed to delete old pass: {e}")
+
+            # Upload new pass
+            filename = f"invite_passes/{invite.invite_code}.png"
+            pass_url = upload_to_s3(pass_file, filename)
+            invite.pass_image = pass_url
+
+        # Save all updates
+        invite.save(update_fields=["status", "visit_time", "checked_out", "pass_image"])
 
         # Track timeline
         InviteStatusTimeline.objects.create(
@@ -144,13 +162,14 @@ class UpdateInviteStatusView(generics.UpdateAPIView):
             updated_by=request.user
         )
 
-        # Update report with check-in/out
+        # Update report
         add_to_report_from_invite(invite)
 
-        # Send email if needed
+        # Send email
         send_invite_email(invite, request)
 
         return Response(InviteSerializer(invite).data, status=status.HTTP_200_OK)
+
 
 
 class VerifyInviteView(APIView):
