@@ -247,49 +247,78 @@ def today_scheduled_stat(request):
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
 def visitor_trends_chart(request):
-    """API for Visitor Trends Chart"""
+    """API for Visitor Trends Chart with optional custom date range"""
     try:
-        days = int(request.GET.get('days', 7))  # Default 7 days
         today = timezone.now().date()
-        
+
+        # ✅ Get custom start_date and end_date from query params
+        start_date_str = request.GET.get("start_date")
+        end_date_str = request.GET.get("end_date")
+
+        if start_date_str and end_date_str:
+            # Convert string to date
+            start_date = timezone.datetime.strptime(start_date_str, "%Y-%m-%d").date()
+            end_date = timezone.datetime.strptime(end_date_str, "%Y-%m-%d").date()
+        else:
+            # Default last 7 days
+            days = int(request.GET.get('days', 7))
+            end_date = today
+            start_date = today - timedelta(days=days - 1)
+
+        # ✅ Convert to datetime ranges (full day)
+        start_datetime = timezone.make_aware(
+            timezone.datetime.combine(start_date, timezone.datetime.min.time())
+        )
+        end_datetime = timezone.make_aware(
+            timezone.datetime.combine(end_date, timezone.datetime.max.time())
+        )
+
         visitor_data = []
         invite_data = []
-        
-        for i in range(days-1, -1, -1):
-            day = today - timedelta(days=i)
-            day_start = timezone.make_aware(timezone.datetime.combine(day, timezone.datetime.min.time()))
+
+        # ✅ Loop from start_date → end_date
+        current_date = start_date
+        while current_date <= end_date:
+            day_start = timezone.make_aware(
+                timezone.datetime.combine(current_date, timezone.datetime.min.time())
+            )
             day_end = day_start + timedelta(days=1)
-            
-            # Visitors count for this day
+
+            # Visitors count for this day (respecting start/end datetime)
             visitors_count = Report.objects.filter(
                 check_in__gte=day_start,
-                check_in__lt=day_end
+                check_in__lt=day_end,
+                check_in__range=(start_datetime, end_datetime)  # ✅ range filter applied
             ).count()
-            
-            # Invites count for this day
+
+            # Invites count for this day (respecting start/end datetime)
             invites_count = Invite.objects.filter(
                 created_at__gte=day_start,
-                created_at__lt=day_end
+                created_at__lt=day_end,
+                created_at__range=(start_datetime, end_datetime)  # ✅ range filter applied
             ).count()
-            
+
             visitor_data.append({
-                'date': day.strftime('%Y-%m-%d'),
-                'display_date': day.strftime('%m/%d'),
-                'day_name': day.strftime('%a'),
+                'date': current_date.strftime('%Y-%m-%d'),
+                'display_date': current_date.strftime('%m/%d'),
+                'day_name': current_date.strftime('%a'),
                 'visitors': visitors_count
             })
-            
+
             invite_data.append({
-                'date': day.strftime('%Y-%m-%d'),
-                'display_date': day.strftime('%m/%d'),
-                'day_name': day.strftime('%a'),
+                'date': current_date.strftime('%Y-%m-%d'),
+                'display_date': current_date.strftime('%m/%d'),
+                'day_name': current_date.strftime('%a'),
                 'invites': invites_count
             })
-        
-        # Calculate trends
+
+            current_date += timedelta(days=1)
+
+        # ✅ Calculate summary
         total_visitors = sum(item['visitors'] for item in visitor_data)
         total_invites = sum(item['invites'] for item in invite_data)
-        
+        days_count = (end_date - start_date).days + 1
+
         return Response({
             'success': True,
             'data': {
@@ -298,19 +327,26 @@ def visitor_trends_chart(request):
                 'summary': {
                     'total_visitors': total_visitors,
                     'total_invites': total_invites,
-                    'days_count': days,
-                    'avg_daily_visitors': round(total_visitors / days, 1),
-                    'avg_daily_invites': round(total_invites / days, 1)
+                    'days_count': days_count,
+                    'avg_daily_visitors': round(total_visitors / days_count, 1) if days_count else 0,
+                    'avg_daily_invites': round(total_invites / days_count, 1) if days_count else 0
+                },
+                'date_range': {
+                    'start': start_date.strftime("%Y-%m-%d"),
+                    'end': end_date.strftime("%Y-%m-%d")
                 },
                 'timestamp': timezone.now().isoformat()
             }
         })
+
     except Exception as e:
         return Response({
             'success': False,
             'error': str(e),
             'data': {'visitor_trends': [], 'invite_trends': []}
         }, status=500)
+
+
 
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
@@ -319,7 +355,7 @@ def todays_activity_chart(request):
     try:
         today = timezone.now().date()
         today_start = timezone.make_aware(timezone.datetime.combine(today, timezone.datetime.min.time()))
-        current_hour = timezone.now().hour
+        current_hour = timezone.localtime().hour
         
         hourly_data = []
         peak_activity = 0
