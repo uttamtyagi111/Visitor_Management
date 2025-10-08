@@ -14,9 +14,13 @@ def send_visitor_status_email(visitor, pass_file=None):
 
     subject, message = "", ""
 
-    if visitor.status == "pending":
-        subject = "Visitor Registration Pending"
-        message = f"Dear {visitor.name},\n\nYour registration is pending. Please wait for approval.\n\nRegards,\nVisitor Management Team"
+    if visitor.status == "created":
+        subject = "Visitor Registration Created"
+        message = f"Dear {visitor.name},\n\nYour registration has been created. Please upload your image compliting the registration.\n\nRegards,\nVisitor Management Team"
+        
+    elif visitor.status == "pending":
+            subject = "Visitor Registration Pending"
+            message = f"Dear {visitor.name},\n\nYour registration is pending. Please wait for approval.\n\nRegards,\nVisitor Management Team"
 
     elif visitor.status == "approved":
         subject = "Visitor Registration Approved"
